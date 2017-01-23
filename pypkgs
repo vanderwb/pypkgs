@@ -1,0 +1,75 @@
+#!/bin/bash
+
+# This script allows users to clone NCAR site-packages into
+# a virtual environment
+
+function print_help () {
+cat << EOF
+Usage: pypkgs command [options]
+
+  Commands (with options):
+
+    1. import                       install loaded Python packages into active virtual environment
+         -u/--unload-modules        unload Python package modules after installation
+
+    2. copy                         copy wheels from all loaded Python packages to current directory
+	     -p/--path                  specify an alternate destination path for wheels
+
+	3. list                         list all loaded Python packages
+EOF
+}
+
+
+function get_list () {
+	PKGLIST=($(printf "%s " ${PYTHONPATH//:/ } | tac -s ' '))
+
+	for P in ${!PKGLIST[@]}; do
+		PKG=${PKGLIST[$P]}
+		PKGLIST[$P]=$(echo ${PKG##*pythonpkgs/} | cut -d '/' -f 2)
+		PKGLIST[$P]="${PKGLIST[$P]}:${PKG/\/lib*}/wheel"
+
+		echo "    ${PKGLIST[$P]%:*}"
+	done
+}
+
+# Actions depend on subcommand choice
+case $1 in
+	import)
+		# First, check that virtual environment is active
+		if [[ -z $VIRTUAL_ENV ]]; then
+			echo "No virtual environment is active; exiting..."
+			exit 1
+		else
+			echo "Virtual environment active in path:"
+			echo "  $VIRTUAL_ENV"
+		fi
+
+		echo -e "\nImporting your loaded modules..."
+		get_list
+
+		unset PYTHONPATH
+		for PKG in ${PKGLIST[@]}; do
+			WHEELNAME=$(ls ${PKG#*:} | cut -d '-' -f 1)
+			pip --no-cache-dir install --no-index -f ${PKG#*:} $WHEELNAME
+		done
+		;;
+	copy)
+		echo "Copying wheels from your loaded modules to current directory..."
+		get_list
+
+		for PKG in ${PKGLIST[@]}; do
+			cp ${PKG#*:}/*.whl .
+		done
+		;;
+	list)
+		echo "The following python package modules are loaded..."
+		get_list
+		;;
+	-v|--version)
+		echo "pypkgs v1.0 - NCAR site-package importer"
+		exit
+		;;
+	*)
+		print_help
+		;;
+esac
